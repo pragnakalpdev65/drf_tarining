@@ -1,0 +1,6 @@
+level_2/venv
+level_2/api/__pycache__
+level_2/core/__pycache__
+level_1/venv
+level_1/core/__pycache__
+level_1/api/__pycache__
