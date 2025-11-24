@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Book, Task, Author, Product
+from .models import Book, Task, Author, Product,CustomUser
 from django.contrib.auth.models import User
 
 class BookSerializer(serializers.ModelSerializer):
@@ -36,7 +36,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     password_confirm = serializers.CharField(write_only=True)
 
     class Meta:
-        model = User
+        model = CustomUser
         fields = ['username', 'email', 'password', 'password_confirm', 'first_name', 'last_name']
 
     def validate(self, data):
@@ -46,5 +46,5 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password_confirm')
-        user = User.objects.create_user(**validated_data)
+        user = CustomUser.objects.create_user(**validated_data)
         return user
