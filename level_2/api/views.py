@@ -1,11 +1,11 @@
 from rest_framework import viewsets,status , generics 
-from .models import Book,Task
+from .models import Book,Task, CustomUser
 from .serializers import BookSerializer,TaskSerializer, AuthorSerializer, ProductSerializer
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
-from rest_framework.views import exception_handler
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
+from django.contrib.auth.base_user import BaseUserManager
 from .serializers import UserRegistrationSerializer
 
 class BookViewSet(viewsets.ModelViewSet):
@@ -61,7 +61,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
 
 class UserRegistrationView(generics.CreateAPIView):
-    queryset = User.objects.all()
+    queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = []
 
