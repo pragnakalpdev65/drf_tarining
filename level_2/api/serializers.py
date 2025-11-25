@@ -1,18 +1,21 @@
 from rest_framework import serializers
-from .models import Book, Task, Author, Product,CustomUser
+from .models import Book, Task, Author, Product,CustomUser, UserProfile
 from django.contrib.auth.models import User
 
 class BookSerializer(serializers.ModelSerializer):
+
+    owner_username = serializers.CharField(source='owner.username', read_only=True)
+
     class Meta:
         model = Book
-        fields = ['id', 'title', 'author', 'published_date', 'isbn', 'description', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'author', 'published_date', 'isbn', 'description', 'owner', 'owner_username', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ['id', 'title', 'desc', 'completed', 'created_at', 'updated_at', 'priority', 'due_date']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'desc', 'completed', 'owner',  'created_at', 'updated_at', 'priority']
+        read_only_fields = ['id', 'owner', 'created_at', 'updated_at']
 
         priority = serializers.ChoiceField(choices=[
              ('high', 'High'),
@@ -48,3 +51,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         validated_data.pop('password_confirm')
         user = CustomUser.objects.create_user(**validated_data)
         return user
+    
+class UserProfileSerializer(serializers.ModelSerializer):
+    username=serializers.CharField(source='user.username', read_only=True)
+    email=serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model=UserProfile
+        fields=['id','username','email','bio','phone_number', 
+                  'avatar', 'website', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']

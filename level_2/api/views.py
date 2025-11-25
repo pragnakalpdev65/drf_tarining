@@ -1,16 +1,18 @@
 from rest_framework import viewsets,status , generics 
-from .models import Book,Task, CustomUser
-from .serializers import BookSerializer,TaskSerializer, AuthorSerializer, ProductSerializer
+from .models import Book,Task, CustomUser ,UserProfile
+from .serializers import BookSerializer,TaskSerializer, AuthorSerializer, ProductSerializer, UserProfileSerializer
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from django.contrib.auth.base_user import BaseUserManager
 from .serializers import UserRegistrationSerializer
-from rest_framework.permissions import IsAuthenticated
-from .permissions import IsOwnerOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, filters
+from .filters import BookFilter, TaskFilter
+from .permissions import IsOwnerOrReadOnly
+from .throttles import BookCreateThrottle
 
 
 class BookViewSet(viewsets.ModelViewSet):
@@ -21,6 +23,15 @@ class BookViewSet(viewsets.ModelViewSet):
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
+
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = TaskFilter
+    search_fields = ['title', 'desc']
+    ordering_fields = ['title', 'completed', 'created_at']
+    ordering = ['-created_at']
+
+
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -42,6 +53,23 @@ class TaskViewSet(viewsets.ModelViewSet):
             'count': queryset.count(),
             'results': serializer.data
         })
+     
+    def get_queryset(self):
+        # Users can only see their own tasks
+        return Task.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+    
+    filter_backends = [DjangoFilterBackend] 
+    filterset_fields = ['completed', 'created_at', 'priority'] 
+
+    # filter_backends = [filters.SearchFilter]
+    # search_fields = ['title', 'desc']
+  
+    filter_backends = [filters.OrderingFilter]  
+    ordering_fields = ['title', 'completed', 'created_at', 'updated_at', 'priority']
+    ordering = ['priority'] 
 
 
 def custom_exception_handler(exc, context):
@@ -90,8 +118,15 @@ class UserRegistrationView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 class BookViewSets(viewsets.ModelViewSet):
-    permission_classes=[IsAuthenticated,IsOwnerOrReadOnly]
-
+    queryset=Book.objects.all()
+    serializer_class=BookSerializer
+    permission_classes=[IsAuthenticatedOrReadOnly,IsOwnerOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = BookFilter
+    search_fields = ['title', 'author', 'description']
+    ordering_fields = ['title', 'author', 'published_date', 'created_at']
+    ordering = ['-created_at']
+     
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
@@ -101,3 +136,16 @@ class BookViewSet(viewsets.ModelViewSet):
     serializer_class = BookSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['author', 'published_date']  
+
+class UseProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UserProfile.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class BookViewSet(viewsets.ModelViewSet):
+    throttle_classes = [BookCreateThrottle]
