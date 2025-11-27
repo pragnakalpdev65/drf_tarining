@@ -1,12 +1,10 @@
 from rest_framework import viewsets,status , generics 
 from .models import Book,Task, CustomUser ,UserProfile, Post, Comment, Tag
-from .serializers import BookSerializer,TaskSerializer, AuthorSerializer, ProductSerializer, UserProfileSerializer, CustomTokenObtainPairSerializer, PostSerializer, CommentSerializer, TagSerializer
+from .serializers import BookSerializer,TaskSerializer, AuthorSerializer, ProductSerializer, UserProfileSerializer, PostSerializer, CommentSerializer, TagSerializer ,CustomUserSerializer
 from rest_framework.views import exception_handler
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
-from django.contrib.auth.base_user import BaseUserManager
-from .serializers import UserRegistrationSerializer
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, filters
@@ -15,6 +13,7 @@ from .permissions import IsOwnerOrReadOnly
 from .throttles import BookCreateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Count 
+from .tasks import send_post_notification
 
 class BookViewSet(viewsets.ModelViewSet):
     queryset = Book.objects.all()
@@ -24,12 +23,11 @@ class BookViewSet(viewsets.ModelViewSet):
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
-
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_class = TaskFilter
+    filterset_fields = ['completed','priority','category']
     search_fields = ['title', 'desc']
-    ordering_fields = ['title', 'completed', 'created_at']
+    ordering_fields = ['title', 'priority', 'due_date','created_at']
     ordering = ['-created_at']
 
 
@@ -56,8 +54,15 @@ class TaskViewSet(viewsets.ModelViewSet):
         })
      
     def get_queryset(self):
-        # Users can only see their own tasks
-        return Task.objects.filter(owner=self.request.user)
+        queryset=Task.objects.selected_realated('owner','category').prefetch_related(
+            'assigned_to'
+        ).filter(owner=self.request.user)
+    
+        if self.request.query_params.get('overdue')=='true':
+            from django.utils import timezone
+            queryset=queryset.filter(due_date__lt=timezone.now(),completed=False)
+
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -97,9 +102,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Book.objects.all()
     serializer_class = ProductSerializer
 
-class UserRegistrationView(generics.CreateAPIView):
+class CustomUserView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
-    serializer_class = UserRegistrationSerializer
+    serializer_class = CustomUserSerializer
     permission_classes = []
 
     def create(self, request, *args, **kwargs):
@@ -152,9 +157,6 @@ class BookViewSet(viewsets.ModelViewSet):
     throttle_classes = [BookCreateThrottle]
 
 
-class CustomTokenObtainPairView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
-
 
 class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
@@ -169,6 +171,10 @@ class PostViewSet(viewsets.ModelViewSet):
         return Post.objects.select_related('author').prefetch_related(
             'tags', 'comments', 'comments__author'
         ).annotate(comment_count=Count('comments')).all()
+    
+    def perform_create(self,serializer):
+        post=serializer.save()
+        send_post_notification.delay(post.id)
 
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer

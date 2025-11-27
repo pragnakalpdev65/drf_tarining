@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
 from rest_framework import serializers
-
+from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     def create_user(self,email,password,**extra_fields):
@@ -65,7 +65,18 @@ class Book(models.Model):
         verbose_name = 'Book'
         verbose_name_plural = 'Books'
 
-
+class Category(models.Model):
+    name=models.CharField(max_length=50, unique=True)
+    color=models.CharField(max_length=7, default='#000000')
+    created_at=models.DateTimeField(auto_now_add=True)
+  
+    def __str__(self):
+        return self.name
+    
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)    
+    
 class Task(models.Model):
 
     PRIORITY_CHOICES = (
@@ -80,16 +91,30 @@ class Task(models.Model):
     owner = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='tasks', default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-
+    due_date = models.DateTimeField(null=True, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    assigned_to = models.ManyToManyField(CustomUser, related_name='assigned_tasks', blank=True)
     priority = models.CharField(
         max_length=20,
         choices=PRIORITY_CHOICES,
         default='medium'
     )
+    deleted_at=models.DateTimeField(null=True, blank=True)
+
+    objects=SoftDeleteManager()
+    all_objects=models.Manager()
+     
 
     def __str__(self):
         return self.title
+    
+    def delete(self, using=None, keep_perents=False):
+        self.deleted_at=timezone.now()
+        self.save()
+    
+    def restore(self):
+        self.deleted_at=None
+        self.save()
 
     class Meta:
         ordering = ['-created_at']
@@ -138,7 +163,7 @@ class Tag(models.Model):
 class Post(models.Model):
     title = models.CharField(max_length=200)
     content=models.TextField()
-    author= models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts')
+    author= models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='posts', null=True)
     tags=models.ManyToManyField(Tag, related_name='posts', blank=True)
     published=models.BooleanField(default=False)
     created_at=models.DateTimeField(auto_now_add=True)
@@ -150,10 +175,11 @@ class Post(models.Model):
     class Meta:
         ordering=['-created_at']
     
+    
 
 class Comment(models.Model):
-    post=models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
-    author=models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='comments')
+    post=models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments',null=True)
+    author=models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='comments',null=True)
     content=models.TextField()
     created_at=models.DateTimeField(auto_now_add=True)
     
@@ -163,3 +189,5 @@ class Comment(models.Model):
     class Meta:
         ordering =['-created_at']
 
+
+    
