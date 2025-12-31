@@ -14,69 +14,78 @@ class CustomUserSerializer(serializers.ModelSerializer):
             ('student', 'Students'),
         ])
 
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = CustomUser(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+                
+
+class PublicCourseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Course
+        fields = ['id', 'title']  
+
+
 class CourseSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source="created_by.username")
-    enrolled_students_count = serializers.IntegerField(read_only=True)
+    lessons_count = serializers.SerializerMethodField()
+    enrolled_students_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
-        fields = [
-            "id", "title", "description", "created_by", "created_at","lessons_count"
+        fields = ["id", "title", "description", "created_by", "created_at", "lessons_count","enrolled_students_count"
         ]
 
-    def create(self, validated_data):
-        request=self.context.get('request')
+    def get_lessons_count(self, obj):
+        return obj.lessons.count()
 
-        if not request or not request.user.is_authenticated:
-            raise serializers.ValidationError("Authentication required to create course")
-        course=Course.objects.create(created_by=request.user, **validated_data)
-        course.save()
+    def get_enrolled_students_count(self, obj):
+        return obj.enrollments.count()
 
-        return course 
     
-    def update(self,instance,validated_data):
-        assigned_to_ids=validated_data.pop('assigned_to_ids',None)
+class StudentCourseSerializer(serializers.ModelSerializer):
+    total_lessons = serializers.SerializerMethodField()
+    total_students = serializers.SerializerMethodField()
 
-        instance.title=validated_data.get('title', instance.title)
-        instance.description=validated_data.get('description',instance.description)
-        instance.lesson_count=validated_data.get('lesson_count',instance.lesson_count)
+    class Meta:
+        model = Course
+        fields = ["id", "title", "description", "total_lessons", "total_students"
+        ]
 
-        instance.save()
+    def get_total_lessons(self, obj):
+        return obj.lessons.count()
 
-        if assigned_to_ids is not None:
-            instance.assigned_to.set(assigned_to_ids)
+    def get_total_students(self, obj):
+        return obj.enrollments.count()
 
-        return instance
-    
-    def get_enrollment_count(self,obj):
-        return obj.enrolled_students_count()
-    
 
 
 class LessonSerializer(serializers.ModelSerializer):
     course_title = serializers.ReadOnlyField(source="course.title")
-    lessons_count = serializers.IntegerField(read_only=True)
-
+    title=serializers.CharField(allow_blank=False )
+    id = serializers.IntegerField(label='ID', read_only=True)
+    video_url = serializers.URLField()
     class Meta:
         model = Lesson
+
         fields = [
-            "id", "course", "course_title","title", "content", "video_url","created_at","lesson_count"
+             "id","course", "course_title","title", "content", "video_url","created_at"
         ]
     
     def create(self,validated_data):
         lesson=Lesson.objects.create(**validated_data)
-        
-
         return lesson
     
     def update(self,instance,validated_data):
 
-        instance.title=validated_data.pop('title',instance.title)
+        instance.title=validated_data.get('title',instance.title)
         instance.content=validated_data.get('content',instance.content)
         instance.video_url=validated_data.get('video_url',instance.video_url)
         
         return instance
-
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     user = serializers.ReadOnlyField(source="user.username")
@@ -84,7 +93,13 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Enrollment
-        fields = ["id", "user", "course", "course_title", "enrolled_at","enroll_students_count"]
+        fields = ["id", "user", "course", "course_title", "enrolled_at"]
+
+    def validate(self, data):
+        user = self.context['request'].user
+        if Enrollment.objects.filter(user=user, course=data['course']).exists():
+            raise serializers.ValidationError("Already enrolled in this course.")
+        return data
     
  
     
