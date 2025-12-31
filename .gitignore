@@ -4,3 +4,7 @@ level_2/core/__pycache__
 level_1/venv
 level_1/core/__pycache__
 level_1/api/__pycache__
+Course_Management_API/api_env
+Course_Management_API/app/__pycache__
+Course_Management_API/appCourse_Management_API/__pycache__
+Course_Management_API/db.sqlite3
